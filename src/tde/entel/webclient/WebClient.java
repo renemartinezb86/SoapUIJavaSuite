@@ -24,6 +24,7 @@ import java.sql.Types;
 
 import java.text.SimpleDateFormat;
 
+import java.util.Arrays;
 import java.util.Date;
 import java.util.List;
 import java.util.Properties;
@@ -33,36 +34,16 @@ import java.util.Properties;
  */
 public class WebClient {
 
-    private String soapUIPath = "";
-    private String operationName = "";
-    private String endpointURI = "";
-    private String requestPayload = "";
-    private String connectionURI = "";
-    private String user = "";
-    private String pass = "";
+    protected String soapUIPath = "";
+    protected String operationName = "";
+    protected String endpointURI = "";
+    protected String requestPayload = "";
+    protected String connectionURI = "";
+    protected String user = "";
+    protected String pass = "";
 
     public WebClient() {
-        try {
-            Properties prop = new Properties();
-            String propFileName = "client.properties";
-            propFileName = "D:\\Work\\WebClient\\conf\\client.properties";
-            InputStream inputStream = new FileInputStream(propFileName);
-            if (inputStream != null) {
-                prop.load(inputStream);
-                soapUIPath = prop.getProperty("soapUIPath");
-                endpointURI = prop.getProperty("endpointURI");
-                requestPayload = prop.getProperty("requestPayload");
-                connectionURI = prop.getProperty("connectionURI");
-                user = prop.getProperty("user");
-                pass = prop.getProperty("pass");
-                operationName = prop.getProperty("operationName");
-            }
-        } catch (Exception e) {
-            e.printStackTrace();
-            StringWriter sw = new StringWriter();
-            PrintWriter pw = new PrintWriter(sw);
-            e.printStackTrace(pw);
-        }
+
     }
 
     public String readFile(String path, Charset encoding) throws IOException {
@@ -74,6 +55,10 @@ public class WebClient {
     public void sendRequest() {
         String projectFile = soapUIPath;
         WsdlProject project = null;
+        Date actualDate = new Date();
+        SimpleDateFormat sdfForFile = new SimpleDateFormat("yyyy/MM/dd:HH:mm:ss");
+        long startTime = 0;
+        long stopTime = 0;
         try {
             project = new WsdlProject(projectFile);
 
@@ -86,30 +71,52 @@ public class WebClient {
             String content = readFile(requestPayload, StandardCharsets.UTF_8);
             req.setRequestContent(content);
             req.setEndpoint(endpointURI);
+            startTime = System.currentTimeMillis();
             WsdlSubmitContext wsdlSubmitContext = new WsdlSubmitContext(req);
             WsdlSubmit<?> submit = (WsdlSubmit<?>) req.submit(wsdlSubmitContext, false);
             Response response = submit.getResponse();
+            stopTime = System.currentTimeMillis();
             String result = response.getContentAsString();
+            if (result.contains("ERROR") && result.contains("FRSP")) {
+
+            } else {
+                result = "OK";
+            }
 
             System.out.println("The result =" + result);
-            Date actualDate = new Date();
-            SimpleDateFormat sdfForFile = new SimpleDateFormat("yyyyMMddHHmmss");
-            dbTrace(result, sdfForFile.format(actualDate));
+
+            long time = stopTime - startTime;
+            System.out.println(time);
+            dbTrace(projectFile, operationName, time, result, sdfForFile.format(actualDate));
         } catch (Exception e) {
+            stopTime = System.currentTimeMillis();
+            long time = stopTime - startTime;
+            System.out.println(time);
+            String fullStackTrace = org.apache.commons.lang.exception.ExceptionUtils.getFullStackTrace(e);
+            dbTrace(projectFile, operationName, time, fullStackTrace, sdfForFile.format(actualDate));
             e.printStackTrace();
         }
     }
 
-    public void dbTrace(String value1, String value2) {
+    public void dbTrace(String serviceName, String operationName, long time, String response, String date) {
 
         Connection connection = null;
         PreparedStatement pstmt = null;
         try {
+            Class.forName("oracle.jdbc.OracleDriver");
+        } catch (ClassNotFoundException e) {
+            e.printStackTrace();
+        }
+        try {
             connection = DriverManager.getConnection(connectionURI, user, pass);
-            String query = "Insert into someTable (ID, NAME) values (?,?)";
+            String query =
+                "Insert into ESB_MONITORING (SERVICE_NAME, OPERATION_NAME, TIME, RESPONSE, REQ_DATE) values (?,?,?,?,?)";
             pstmt = connection.prepareStatement(query); // create a statement
-            pstmt.setString(1, value1);
-            pstmt.setString(2, value2);
+            pstmt.setString(1, serviceName);
+            pstmt.setString(2, operationName);
+            pstmt.setLong(3, time);
+            pstmt.setString(4, response);
+            pstmt.setString(5, date);
             pstmt.executeUpdate();
         } catch (Exception e) {
             e.printStackTrace();
@@ -170,7 +177,44 @@ public class WebClient {
 
     public static void main(String[] args) {
         WebClient client = new WebClient();
+        try {
+            Properties prop = new Properties();
+            String propFileName = "client.properties";
+            //propFileName = "D:\\Work\\WebClient\\conf\\client.properties";
+            InputStream inputStream = new FileInputStream(propFileName);
+            if (inputStream != null) {
+                prop.load(inputStream);
+                client.soapUIPath = prop.getProperty("soapUIPath");
+                client.endpointURI = prop.getProperty("endpointURI");
+                client.requestPayload = prop.getProperty("requestPayload");
+                client.connectionURI = prop.getProperty("connectionURI");
+                client.user = prop.getProperty("user");
+                client.pass = prop.getProperty("pass");
+                client.operationName = prop.getProperty("operationName");
+            }
+        } catch (Exception e) {
+            e.printStackTrace();
+            StringWriter sw = new StringWriter();
+            PrintWriter pw = new PrintWriter(sw);
+            e.printStackTrace(pw);
+        }
+        if (args.length > 0) {
+            for (int i = 0; i < args.length; i++) {
+                if (args[i].equals("-p")) {
+                    client.soapUIPath = args[i + 1];
+                }
+                if (args[i].equals("-e")) {
+                    client.endpointURI = args[i + 1];
+                }
+                if (args[i].equals("-o")) {
+                    client.operationName = args[i + 1];
+                }
+                if (args[i].equals("-r")) {
+                    client.requestPayload = args[i + 1];
+                }
+            }
+        }
         client.sendRequest();
+        System.exit(0);
     }
-
 }
