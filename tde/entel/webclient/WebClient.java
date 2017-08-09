@@ -52,7 +52,8 @@ public class WebClient {
         return new String(encoded, encoding);
     }
 
-    public void sendRequest() {
+    public boolean sendRequest() {
+        String result = "";
         String projectFile = soapUIPath;
         WsdlProject project = null;
         Date actualDate = new Date();
@@ -76,17 +77,17 @@ public class WebClient {
             WsdlSubmit<?> submit = (WsdlSubmit<?>) req.submit(wsdlSubmitContext, false);
             Response response = submit.getResponse();
             stopTime = System.currentTimeMillis();
-            String result = response.getContentAsString();
+            result = response.getContentAsString();
             if (result.contains("ERROR") && result.contains("FRSP")) {
 
             } else {
-                result = "OK";
+                result = " OK";
             }
 
             System.out.println("The result =" + result);
 
             long time = stopTime - startTime;
-            System.out.println(time);
+            System.out.println("The time = "+ time);
             dbTrace(projectFile, operationName, time, result, sdfForFile.format(actualDate));
         } catch (Exception e) {
             stopTime = System.currentTimeMillis();
@@ -96,6 +97,7 @@ public class WebClient {
             dbTrace(projectFile, operationName, time, fullStackTrace, sdfForFile.format(actualDate));
             e.printStackTrace();
         }
+        return result.equals("OK");
     }
 
     public void dbTrace(String serviceName, String operationName, long time, String response, String date) {
@@ -180,7 +182,7 @@ public class WebClient {
         try {
             Properties prop = new Properties();
             String propFileName = "client.properties";
-            //propFileName = "D:\\Work\\WebClient\\conf\\client.properties";
+            propFileName = "C:\\Users\\proyecto\\Documents\\Work\\WebClient\\conf\\client.properties";
             InputStream inputStream = new FileInputStream(propFileName);
             if (inputStream != null) {
                 prop.load(inputStream);
@@ -214,7 +216,9 @@ public class WebClient {
                 }
             }
         }
-        client.sendRequest();
-        System.exit(0);
+        if (client.sendRequest())
+            System.exit(0);
+        else
+            System.exit(1);
     }
 }
